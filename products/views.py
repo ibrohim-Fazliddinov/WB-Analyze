@@ -8,25 +8,26 @@ from products.serializer import ProductsSerializer
 
 
 class ListProductsView(ListAPIView):
+    """
+    API endpoint для получения списка товаров с поддержкой фильтрации.
+
+    Поддерживаемые параметры фильтрации (GET query params):
+    - min_price: минимальная цена товара (например, min_price=5000)
+    - max_price: максимальная цена товара (например, max_price=10000)
+    - min_rating: минимальный рейтинг товара (например, min_rating=4.5)
+    - min_review_count: минимальное количество отзывов (например, min_review_count=100)
+
+    Пример запроса:
+        GET /api/products/?min_price=5000&min_rating=4.5
+
+    Ответ:
+        Список товаров, удовлетворяющих условиям фильтрации, в JSON-формате.
+    """
+
+    queryset = ProductModel.objects.all()
     serializer_class = ProductsSerializer
-    # queryset = ProductModel.objects.all()
     filter_backends = [DjangoFilterBackend]
     filterset_class = ProductFilter
-    # filterset_fields = ['price', 'rating', 'review_count']
 
-    def get_queryset(self):
-        qs = ProductModel.objects.all()
-        min_price = self.request.query_params.get("min_price")
-        max_price = self.request.query_params.get("max_price")
-        if min_price:
-            qs = qs.filter(price__gte=min_price)
-        if max_price:
-            qs = qs.filter(price__lte=max_price)
-        # аналогично для рейтинга и отзывов:
-        min_rating = self.request.query_params.get("min_rating")
-        if min_rating:
-            qs = qs.filter(rating__gte=min_rating)
-        min_review_count = self.request.query_params.get("min_review_count")
-        if min_review_count:
-            qs = qs.filter(review_count__gte=min_review_count)
-        return qs
+
+

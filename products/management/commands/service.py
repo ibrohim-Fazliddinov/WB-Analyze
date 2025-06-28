@@ -40,16 +40,26 @@ class Command(BaseCommand):
             "spp": "30",
             "suppressSpellcheck": "false",
         }
-        response = requests.get(url, params=params, headers=headers)
-        response.raise_for_status()
+
+        try:
+            response = requests.get(url, params=params, headers=headers, timeout=10)
+            response.raise_for_status()
+        except requests.RequestException as e:
+            self.stderr.write(self.style.ERROR(f"Ошибка запроса к WB API: {e}"))
+            return
+
         data = response.json()
         products = data.get("data", {}).get("products", [])
 
+        if not products:
+            self.stdout.write(self.style.WARNING("Не найдено ни одного товара."))
+            return
+
         with transaction.atomic():
             objs = []
+
             for item in products:
-                # 1) Берём первый size (если он есть)
-                sizes = item.get("sizes") or []
+                sizes = item.get("sizes", [])
                 if sizes:
                     price_info = sizes[0].get("price", {})
                     basic_cents = price_info.get("basic", 0)
@@ -57,23 +67,15 @@ class Command(BaseCommand):
                 else:
                     basic_cents = product_cents = 0
 
-                # 2) Рейтинг и отзывы на уровне item
-                rating = float(item.get("rating", 0))
-                review_count = int(item.get("feedbacks", 0))
-
-                objs.append(
-                    ProductModel(
-                        articul=int(item["id"]),
-                        name=item.get("name", "")[:500],
-                        brand=item.get("brand", "")[:500],
-                        price=Decimal(basic_cents) / 100,  # basic → Decimal рубли
-                        discounted_price=Decimal(product_cents)
-                        / 100,  # product → рубли
-                        rating=rating,
-                        review_count=review_count,
-                    )
-                )
+                objs.append(ProductModel(
+                    articul=int(item["id"]),
+                    name=item.get("name", "")[:500],
+                    brand=item.get("brand", "")[:500],
+                    price=Decimal(basic_cents) / 100,
+                    discounted_price=Decimal(product_cents) / 100,
+                    rating=float(item.get("rating", 0)),
+                    review_count=int(item.get("feedbacks", 0)),
+                ))
 
             ProductModel.objects.bulk_create(objs, ignore_conflicts=True)
-
             self.stdout.write(self.style.SUCCESS(f"Сохранено {len(objs)} товаров"))
